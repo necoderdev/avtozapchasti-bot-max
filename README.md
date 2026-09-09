@@ -1,41 +1,197 @@
-# MAX-бот доставки автозапчастей
+# MAX Auto Parts Delivery Bot
 
-Бот принимает VIN, название запчасти, адрес и телефон, после подтверждения
-отправляет заявку администраторам.
+[Русский](#русский) · [English](#english)
 
-## Безопасный запуск
+---
 
-1. Перевыпустите токен бота в MAX. Ранее использованный токен нельзя считать
-   секретным, даже если он ещё работает.
-2. Скопируйте `.env.example` в `.env` только для локального запуска.
-3. Заполните `BOT_TOKEN` и `ADMIN_IDS`. Несколько ID разделяются запятыми.
-4. Установите зависимости и запустите процесс:
+## Русский
+
+Чат-бот для оформления доставки автозапчастей через мессенджер MAX. Бот последовательно запрашивает VIN автомобиля, название запчасти, адрес доставки и номер телефона, после чего показывает заявку для подтверждения и отправляет её администраторам.
+
+### Возможности
+
+- адаптивные inline-кнопки вместо текстовых команд;
+- проверка формата VIN и номера телефона;
+- подтверждение и отмена заявки;
+- защита от повторного подтверждения и использования устаревших кнопок;
+- отправка заявки одному или нескольким администраторам;
+- автоматическое удаление незавершённых заявок через час;
+- ограничение частоты обращений к MAX API;
+- безопасное TLS-подключение с сертификатом Минцифры;
+- поддержка Railway, Docker и локального запуска.
+
+### Требования
+
+- Python 3.13 или новее;
+- созданный и настроенный бот в MAX;
+- токен MAX Bot API;
+- ID хотя бы одного администратора.
+
+### Локальная установка
+
+1. Клонируйте репозиторий и перейдите в его каталог.
+2. Создайте локальный файл окружения:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+3. Заполните `.env`:
+
+```dotenv
+BOT_TOKEN=новый_токен_вашего_бота
+ADMIN_IDS=123456789
+LOG_LEVEL=INFO
+```
+
+Несколько ID администраторов можно разделить запятыми:
+
+```dotenv
+ADMIN_IDS=123456789,987654321
+```
+
+4. Установите зависимости и запустите бота:
 
 ```powershell
 python -m pip install -r requirements.txt
 python max_bot.py
 ```
 
-На Railway добавьте `BOT_TOKEN` и `ADMIN_IDS` через раздел Variables. Не создавайте
-`.env` в репозитории и не записывайте токен в Dockerfile, команды запуска или логи.
+### Запуск через Docker
 
-## Развёртывание
+```bash
+docker build -t max-auto-parts-bot .
+docker run --env-file .env --restart unless-stopped max-auto-parts-bot
+```
 
-Проект содержит конфигурации Railway, Procfile и Dockerfile. Для текущего режима
-Long Polling должна работать ровно одна реплика. Не запускайте одновременно
-локальную и серверную копии с одним токеном.
+Контейнер запускается от непривилегированного пользователя.
 
-MAX рекомендует Webhook для production. Переход потребует публичного HTTPS URL и
-секретного значения webhook; текущая версия оставлена на Long Polling, поскольку
-она не требует отдельного веб-сервера.
+### Развёртывание на Railway
 
-## Проверки перед публикацией
+1. Подключите GitHub-репозиторий к Railway.
+2. Добавьте в разделе **Variables** переменные `BOT_TOKEN`, `ADMIN_IDS` и при необходимости `LOG_LEVEL`.
+3. Разверните сервис. Команда запуска и политика перезапуска уже находятся в `railway.json`.
+4. Установите одну реплику сервиса.
+
+Не запускайте локальную и серверную копии одновременно с одним токеном: экземпляры Long Polling будут конкурировать за обновления.
+
+### Проверка
 
 ```powershell
 python -m unittest discover -s tests -v
 python -m pip check
 ```
 
-Перед первым push проверьте список файлов через `git status` и убедитесь, что
-`.env` отсутствует. В настройках публичного GitHub-репозитория включите Secret
-Scanning и Push Protection. Используйте только одну серверную реплику.
+### Безопасность
+
+- Никогда не добавляйте `.env` в Git и не записывайте токен в код, Dockerfile или логи.
+- Настоящий `.env` уже исключён через `.gitignore` и `.dockerignore`.
+- Перед первой публикацией перевыпустите любой токен, который ранее находился в исходном коде.
+- Храните секреты в Railway Variables или в менеджере секретов вашего сервера.
+- Включите в GitHub функции Secret Scanning и Push Protection.
+- Не публикуйте логи с VIN, адресами и телефонами клиентов.
+
+Дополнительные рекомендации находятся в [SECURITY.md](SECURITY.md).
+
+### Ограничения
+
+Сейчас бот получает события через Long Polling. Для небольшой нагрузки достаточно одного постоянно работающего процесса, однако MAX рекомендует использовать Webhook в production. Для Webhook потребуется публичный HTTPS-адрес и отдельный секрет.
+
+---
+
+## English
+
+A chatbot for arranging auto-parts delivery through the MAX messenger. The bot collects the vehicle VIN, required part, delivery address, and phone number, displays the completed request for confirmation, and forwards it to the configured administrators.
+
+### Features
+
+- responsive inline buttons instead of text commands;
+- VIN and phone number validation;
+- order confirmation and cancellation;
+- protection against duplicate confirmations and stale buttons;
+- delivery of requests to one or more administrators;
+- automatic removal of incomplete requests after one hour;
+- MAX API request-rate limiting;
+- secure TLS connection with the required Ministry of Digital Development certificate;
+- Railway, Docker, and local deployment support.
+
+### Requirements
+
+- Python 3.13 or newer;
+- a configured MAX bot;
+- a MAX Bot API token;
+- at least one administrator ID.
+
+### Local installation
+
+1. Clone the repository and open its directory.
+2. Create a local environment file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+3. Configure `.env`:
+
+```dotenv
+BOT_TOKEN=your_new_bot_token
+ADMIN_IDS=123456789
+LOG_LEVEL=INFO
+```
+
+Multiple administrator IDs can be separated with commas:
+
+```dotenv
+ADMIN_IDS=123456789,987654321
+```
+
+4. Install the dependencies and start the bot:
+
+```powershell
+python -m pip install -r requirements.txt
+python max_bot.py
+```
+
+### Running with Docker
+
+```bash
+docker build -t max-auto-parts-bot .
+docker run --env-file .env --restart unless-stopped max-auto-parts-bot
+```
+
+The container runs as a non-root user.
+
+### Deploying to Railway
+
+1. Connect the GitHub repository to Railway.
+2. Add `BOT_TOKEN`, `ADMIN_IDS`, and optionally `LOG_LEVEL` under **Variables**.
+3. Deploy the service. The start command and restart policy are already defined in `railway.json`.
+4. Keep the service at one replica.
+
+Do not run local and remote instances with the same token at the same time. Multiple Long Polling instances will compete for updates.
+
+### Verification
+
+```powershell
+python -m unittest discover -s tests -v
+python -m pip check
+```
+
+### Security
+
+- Never commit `.env` or place the token in source code, Dockerfile instructions, or logs.
+- The real `.env` is excluded through `.gitignore` and `.dockerignore`.
+- Rotate any token that has previously appeared in source code before the first public push.
+- Store production secrets in Railway Variables or your server's secret manager.
+- Enable GitHub Secret Scanning and Push Protection.
+- Do not publish logs containing customer VINs, addresses, or phone numbers.
+
+See [SECURITY.md](SECURITY.md) for additional recommendations.
+
+### Limitations
+
+The bot currently receives events through Long Polling. A single continuously running process is sufficient for a small workload, but MAX recommends Webhooks for production. A Webhook deployment requires a public HTTPS endpoint and a separate secret.
+
+## License
+
+No license has been specified yet. Add a `LICENSE` file before allowing third-party reuse or redistribution.
