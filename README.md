@@ -6,7 +6,7 @@
 
 ## Русский
 
-Чат-бот для оформления доставки автозапчастей через мессенджер MAX. Бот последовательно запрашивает VIN автомобиля, название запчасти, адрес доставки и номер телефона, после чего показывает заявку для подтверждения и отправляет её администраторам.
+Чат-бот для оформления доставки автозапчастей через мессенджер MAX. Бот последовательно запрашивает VIN, марку и год выпуска автомобиля, название запчасти и номер телефона, после чего показывает заявку для подтверждения и отправляет её администраторам.
 
 ### Возможности
 
@@ -90,7 +90,7 @@ python -m pip check
 - Перед первой публикацией перевыпустите любой токен, который ранее находился в исходном коде.
 - Храните секреты в Railway Variables или в менеджере секретов вашего сервера.
 - Включите в GitHub функции Secret Scanning и Push Protection.
-- Не публикуйте логи с VIN, адресами и телефонами клиентов.
+- Не публикуйте логи с VIN и телефонами клиентов.
 
 Дополнительные рекомендации находятся в [SECURITY.md](SECURITY.md).
 
@@ -102,7 +102,7 @@ python -m pip check
 
 ## English
 
-A chatbot for arranging auto-parts delivery through the MAX messenger. The bot collects the vehicle VIN, required part, delivery address, and phone number, displays the completed request for confirmation, and forwards it to the configured administrators.
+A chatbot for arranging auto-parts delivery through the MAX messenger. The bot collects the vehicle VIN, make, model year, required part, and phone number, displays the completed request for confirmation, and forwards it to the configured administrators.
 
 ### Features
 
@@ -186,7 +186,7 @@ python -m pip check
 - Rotate any token that has previously appeared in source code before the first public push.
 - Store production secrets in Railway Variables or your server's secret manager.
 - Enable GitHub Secret Scanning and Push Protection.
-- Do not publish logs containing customer VINs, addresses, or phone numbers.
+- Do not publish logs containing customer VINs or phone numbers.
 
 See [SECURITY.md](SECURITY.md) for additional recommendations.
 

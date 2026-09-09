@@ -7,6 +7,7 @@ import secrets
 import ssl
 import time
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -114,8 +115,9 @@ client: MaxClient
 class Order:
     step: str = "vin"
     vin: str = ""
+    car_make: str = ""
+    year: str = ""
     part: str = ""
-    address: str = ""
     phone: str = ""
     nonce: str = ""
     updated_at: float = 0.0
@@ -213,8 +215,9 @@ def valid_vin(value: str) -> bool:
 
 def order_summary(order: Order) -> str:
     return ("Проверьте заявку:\n\n"
-            f"VIN: {order.vin}\nЗапчасть: {order.part}\n"
-            f"Адрес доставки: {order.address}\nТелефон: {order.phone}\n\n"
+            f"VIN: {order.vin}\nМарка автомобиля: {order.car_make}\n"
+            f"Год выпуска: {order.year}\nЗапчасть: {order.part}\n"
+            f"Телефон: {order.phone}\n\n"
             "Подтвердите данные кнопкой ниже.")
 
 
@@ -224,7 +227,8 @@ async def notify_admins(user_id: int, order: Order) -> bool:
         return False
     message = ("🚘 Новая заявка на автозапчасть\n\n"
                f"Пользователь MAX: {user_id}\nVIN: {order.vin}\n"
-               f"Запчасть: {order.part}\nАдрес: {order.address}\nТелефон: {order.phone}")
+               f"Марка автомобиля: {order.car_make}\nГод выпуска: {order.year}\n"
+               f"Запчасть: {order.part}\nТелефон: {order.phone}")
     reply_nonce = secrets.token_urlsafe(12)
     reply_targets[reply_nonce] = ReplyTarget(user_id=user_id, created_at=time.monotonic())
     buttons = [[callback_button("💬 Ответить клиенту", f"reply:start:{reply_nonce}",
@@ -281,7 +285,30 @@ async def handle_message(user_id: int, text: str,
             order.touch()
             await answer("VIN должен состоять из 17 латинских букв и цифр (буквы I, O, Q не используются). Проверьте номер и отправьте ещё раз.", buttons=cancel_buttons(order))
             return
-        order.vin, order.step = vin, "part"
+        order.vin, order.step = vin, "make"
+        order.touch()
+        await answer("Укажите марку автомобиля. Например: Toyota.", buttons=cancel_buttons(order))
+        return
+    if order.step == "make":
+        if len(text) < 2:
+            order.touch()
+            await answer("Укажите марку автомобиля полностью.", buttons=cancel_buttons(order))
+            return
+        order.car_make, order.step = text[:100], "year"
+        order.touch()
+        await answer("Укажите год выпуска автомобиля. Например: 2018.", buttons=cancel_buttons(order))
+        return
+    if order.step == "year":
+        if not re.fullmatch(r"\d{4}", text):
+            order.touch()
+            await answer("Введите год четырьмя цифрами. Например: 2018.", buttons=cancel_buttons(order))
+            return
+        year = int(text)
+        if not 1886 <= year <= date.today().year + 1:
+            order.touch()
+            await answer(f"Укажите год от 1886 до {date.today().year + 1}.", buttons=cancel_buttons(order))
+            return
+        order.year, order.step = text, "part"
         order.touch()
         await answer("Какую запчасть нужно найти? Укажите название и, если знаете, артикул.", buttons=cancel_buttons(order))
         return
@@ -290,16 +317,7 @@ async def handle_message(user_id: int, text: str,
             order.touch()
             await answer("Опишите нужную запчасть подробнее.", buttons=cancel_buttons(order))
             return
-        order.part, order.step = text[:1000], "address"
-        order.touch()
-        await answer("Укажите адрес доставки в Краснодаре.", buttons=cancel_buttons(order))
-        return
-    if order.step == "address":
-        if len(text) < 5:
-            order.touch()
-            await answer("Укажите полный адрес доставки.", buttons=cancel_buttons(order))
-            return
-        order.address, order.step = text[:500], "phone"
+        order.part, order.step = text[:1000], "phone"
         order.touch()
         await answer("Укажите номер телефона для связи.", buttons=cancel_buttons(order))
         return

@@ -57,8 +57,9 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         await self.click("order:start")
         order = max_bot.orders[777]
         await self.message("WVWZZZ1JZXW000001")
+        await self.message("Toyota")
+        await self.message("2018")
         await self.message("brake pads")
-        await self.message("Krasnodar, Krasnaya 1")
         await self.message("+7 928 000 00 00")
         await self.click(f"order:confirm:{order.nonce}", "confirm")
         await self.click(f"order:confirm:{order.nonce}", "duplicate")
@@ -88,8 +89,9 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         await self.click("order:start")
         order = max_bot.orders[777]
         await self.message("WVWZZZ1JZXW000001")
+        await self.message("Toyota")
+        await self.message("2018")
         await self.message("brake pads")
-        await self.message("Krasnodar, Krasnaya 1")
         await self.message("+7 928 000 00 00")
         await self.click(f"order:confirm:{order.nonce}", "confirm")
 
@@ -112,6 +114,13 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
     def test_vin_validation(self):
         self.assertTrue(max_bot.valid_vin("WVWZZZ1JZXW000001"))
         self.assertFalse(max_bot.valid_vin("INVALID"))
+
+    async def test_invalid_year_does_not_advance_order(self):
+        await self.click("order:start")
+        await self.message("WVWZZZ1JZXW000001")
+        await self.message("Toyota")
+        await self.message("18")
+        self.assertEqual(max_bot.orders[777].step, "year")
 
 
 if __name__ == "__main__":
