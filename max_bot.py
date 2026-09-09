@@ -128,7 +128,21 @@ class Order:
         self.updated_at = time.monotonic()
 
 
+@dataclass
+class ReplyTarget:
+    user_id: int
+    created_at: float
+
+
+@dataclass
+class AdminReply:
+    user_id: int
+    nonce: str
+
+
 orders: dict[int, Order] = {}
+reply_targets: dict[str, ReplyTarget] = {}
+admin_replies: dict[int, AdminReply] = {}
 
 
 def callback_button(text: str, payload: str, intent: str = "default") -> dict:
@@ -140,6 +154,7 @@ MAIN_BUTTONS = [
     [callback_button("☎️ Поддержка", "menu:support")],
 ]
 ORDER_TTL_SECONDS = 60 * 60
+REPLY_TARGET_TTL_SECONDS = 24 * 60 * 60
 MAX_ACTIVE_ORDERS = 10_000
 
 
@@ -154,18 +169,37 @@ def confirm_buttons(order: Order) -> list[list[dict]]:
     ]]
 
 
-def remove_expired_orders() -> None:
+def admin_reply_buttons(nonce: str) -> list[list[dict]]:
+    return [[callback_button("Завершить диалог", f"reply:finish:{nonce}", "negative")]]
+
+
+def remove_expired_state() -> None:
     deadline = time.monotonic() - ORDER_TTL_SECONDS
     expired = [user_id for user_id, order in orders.items()
                if order.updated_at < deadline]
     for user_id in expired:
         orders.pop(user_id, None)
+    reply_deadline = time.monotonic() - REPLY_TARGET_TTL_SECONDS
+    expired_targets = [nonce for nonce, target in reply_targets.items()
+                       if target.created_at < reply_deadline]
+    for nonce in expired_targets:
+        reply_targets.pop(nonce, None)
+    valid_nonces = set(reply_targets)
+    expired_admins = [admin_id for admin_id, session in admin_replies.items()
+                      if session.nonce not in valid_nonces]
+    for admin_id in expired_admins:
+        admin_replies.pop(admin_id, None)
 
 
 def main_text() -> str:
     return ("👋 Добро пожаловать!\n\n"
             "🚗 Подбор и доставка автозапчастей по Краснодару.\n"
             "Выберите нужное действие:")
+
+
+def clean_text(text: str) -> str:
+    return "".join(char for char in text[:4000]
+                   if char in "\n\t" or ord(char) >= 32).strip()
 
 
 def command_from(text: str) -> str:
@@ -191,21 +225,26 @@ async def notify_admins(user_id: int, order: Order) -> bool:
     message = ("🚘 Новая заявка на автозапчасть\n\n"
                f"Пользователь MAX: {user_id}\nVIN: {order.vin}\n"
                f"Запчасть: {order.part}\nАдрес: {order.address}\nТелефон: {order.phone}")
+    reply_nonce = secrets.token_urlsafe(12)
+    reply_targets[reply_nonce] = ReplyTarget(user_id=user_id, created_at=time.monotonic())
+    buttons = [[callback_button("💬 Ответить клиенту", f"reply:start:{reply_nonce}",
+                                "positive")]]
     delivered = False
     for admin_id in ADMIN_IDS:
         try:
-            await client.send_message(user_id=admin_id, text=message)
+            await client.send_message(user_id=admin_id, text=message, buttons=buttons)
             delivered = True
         except Exception:
             logger.exception("Не удалось отправить заявку администратору %s", admin_id)
+    if not delivered:
+        reply_targets.pop(reply_nonce, None)
     return delivered
 
 
 async def handle_message(user_id: int, text: str,
                          answer: Callable[..., Awaitable[object]]) -> None:
-    remove_expired_orders()
-    text = "".join(char for char in text[:4000]
-                   if char in "\n\t" or ord(char) >= 32).strip()
+    remove_expired_state()
+    text = clean_text(text)
     command = command_from(text)
 
     if command in {"/start", "/help"}:
@@ -287,6 +326,47 @@ async def handle_message(user_id: int, text: str,
             await answer("Не удалось передать заявку администратору. Позвоните в поддержку или попробуйте позже; введённые данные сохранены.", buttons=confirm_buttons(order))
 
 
+async def handle_admin_reply(admin_id: int, text: str) -> None:
+    session = admin_replies.get(admin_id)
+    if session is None:
+        return
+    target = reply_targets.get(session.nonce)
+    if target is None:
+        admin_replies.pop(admin_id, None)
+        await client.send_message(
+            user_id=admin_id,
+            text="Срок ответа на эту заявку истёк.",
+        )
+        return
+    text = clean_text(text)
+    if not text:
+        await client.send_message(
+            user_id=admin_id,
+            text="Введите текст ответа клиенту.",
+            buttons=admin_reply_buttons(session.nonce),
+        )
+        return
+    try:
+        await client.send_message(
+            user_id=target.user_id,
+            text=f"💬 Сообщение от менеджера:\n\n{text}",
+        )
+    except Exception:
+        logger.exception("Не удалось доставить ответ клиенту")
+        await client.send_message(
+            user_id=admin_id,
+            text="❌ Сообщение не доставлено. Клиент мог остановить бота. Попробуйте ещё раз или завершите диалог.",
+            buttons=admin_reply_buttons(session.nonce),
+        )
+        return
+    target.created_at = time.monotonic()
+    await client.send_message(
+        user_id=admin_id,
+        text="✅ Сообщение отправлено клиенту. Можете написать ещё одно или завершить диалог.",
+        buttons=admin_reply_buttons(session.nonce),
+    )
+
+
 async def process_update(update: dict) -> None:
     update_type = update.get("update_type")
     if update_type == "bot_started":
@@ -325,6 +405,28 @@ async def process_update(update: dict) -> None:
             return
 
         parts = payload.split(":", maxsplit=2)
+        if len(parts) == 3 and parts[0] == "reply":
+            if user_id not in ADMIN_IDS:
+                logger.warning("Отклонена попытка использовать кнопку ответа не администратором")
+                return
+            action, nonce = parts[1], parts[2]
+            if action == "start":
+                target = reply_targets.get(nonce)
+                if target is None:
+                    await answer("Срок ответа на эту заявку истёк.")
+                    return
+                admin_replies[user_id] = AdminReply(user_id=target.user_id, nonce=nonce)
+                await answer(
+                    "💬 Режим ответа включён. Следующее текстовое сообщение будет отправлено клиенту от имени бота.",
+                    buttons=admin_reply_buttons(nonce),
+                )
+            elif action == "finish":
+                session = admin_replies.get(user_id)
+                if session and secrets.compare_digest(session.nonce, nonce):
+                    admin_replies.pop(user_id, None)
+                    await answer("Диалог с клиентом завершён.")
+            return
+
         if len(parts) == 3 and parts[0] == "order":
             action, nonce = parts[1], parts[2]
             order = orders.get(user_id)
@@ -345,6 +447,10 @@ async def process_update(update: dict) -> None:
     user_id = sender.get("user_id")
     text = body.get("text")
     if user_id is None or not isinstance(text, str):
+        return
+
+    if user_id in ADMIN_IDS and user_id in admin_replies:
+        await handle_admin_reply(user_id, text)
         return
 
     async def answer(reply: str, **kwargs):

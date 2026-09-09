@@ -15,6 +15,7 @@
 - подтверждение и отмена заявки;
 - защита от повторного подтверждения и использования устаревших кнопок;
 - отправка заявки одному или нескольким администраторам;
+- ответы администратора клиенту от имени бота;
 - автоматическое удаление незавершённых заявок через час;
 - ограничение частоты обращений к MAX API;
 - безопасное TLS-подключение с сертификатом Минцифры;
@@ -110,6 +111,7 @@ A chatbot for arranging auto-parts delivery through the MAX messenger. The bot c
 - order confirmation and cancellation;
 - protection against duplicate confirmations and stale buttons;
 - delivery of requests to one or more administrators;
+- administrator replies to customers on behalf of the bot;
 - automatic removal of incomplete requests after one hour;
 - MAX API request-rate limiting;
 - secure TLS connection with the required Ministry of Digital Development certificate;

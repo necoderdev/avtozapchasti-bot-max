@@ -31,6 +31,8 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         max_bot.client = self.client
         max_bot.ADMIN_IDS = (123,)
         max_bot.orders.clear()
+        max_bot.reply_targets.clear()
+        max_bot.admin_replies.clear()
 
     async def click(self, payload, callback_id="callback", user_id=777):
         await max_bot.process_update({
@@ -79,8 +81,33 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         order = max_bot.Order()
         order.updated_at = time.monotonic() - max_bot.ORDER_TTL_SECONDS - 1
         max_bot.orders[777] = order
-        max_bot.remove_expired_orders()
+        max_bot.remove_expired_state()
         self.assertNotIn(777, max_bot.orders)
+
+    async def test_admin_can_reply_to_client(self):
+        await self.click("order:start")
+        order = max_bot.orders[777]
+        await self.message("WVWZZZ1JZXW000001")
+        await self.message("brake pads")
+        await self.message("Krasnodar, Krasnaya 1")
+        await self.message("+7 928 000 00 00")
+        await self.click(f"order:confirm:{order.nonce}", "confirm")
+
+        admin_order = next(item for item in self.client.messages
+                           if item[1].get("user_id") == 123)
+        reply_payload = admin_order[1]["buttons"][0][0]["payload"]
+        reply_nonce = reply_payload.rsplit(":", 1)[1]
+        await self.click(reply_payload, "reply", user_id=123)
+        self.assertIn(123, max_bot.admin_replies)
+
+        await self.message("The part is available tomorrow.", user_id=123)
+        client_replies = [item for item in self.client.messages
+                          if item[1].get("user_id") == 777
+                          and "The part is available" in item[0]]
+        self.assertEqual(len(client_replies), 1)
+
+        await self.click(f"reply:finish:{reply_nonce}", "finish", user_id=123)
+        self.assertNotIn(123, max_bot.admin_replies)
 
     def test_vin_validation(self):
         self.assertTrue(max_bot.valid_vin("WVWZZZ1JZXW000001"))
